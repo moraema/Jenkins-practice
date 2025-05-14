@@ -35,14 +35,14 @@ pipeline {
                         env.DEPLOY_ENV = 'DEV'
                         env.NODE_ENV = 'development'
                         env.EC2_USER = 'ubuntu'
-                        env.EC2_IP = '192.168.1.10'
+                        env.EC2_IP = '54.157.194.224'
                         env.REMOTE_PATH = '/home/ubuntu/Jenkins-practice'
                         env.APP_NAME = 'health-api'
                     } else if (env.GIT_BRANCH_CLEAN == 'QA') {
                         env.DEPLOY_ENV = 'QA'
                         env.NODE_ENV = 'testing'
                         env.EC2_USER = 'ubuntu'
-                        env.EC2_IP = '192.168.1.20'
+                        env.EC2_IP = '54.85.152.233'
                         env.REMOTE_PATH = '/home/ubuntu/Jenkins-practice'
                         env.APP_NAME = 'health-api'
                     } else {
