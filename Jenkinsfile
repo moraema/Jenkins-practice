@@ -1,39 +1,86 @@
 pipeline {
     agent any
-
+    
     environment {
-        NODE_ENV = 'production'
-        EC2_USER = 'ubuntu'
-        EC2_IP = '34.197.126.56'
-        REMOTE_PATH = '/home/ubuntu/Jenkins-practice'
+      
         SSH_KEY = credentials('ssh-key-ec2')
     }
-
+    
     stages {
-        stage('Checkout') {
+        stage('Determine Environment') {
             steps {
-                git branch: 'main', url: 'https://github.com/moraema/Jenkins-practice.git'
+                script {
+                   
+                    env.GIT_BRANCH = sh(script: 'git rev-parse --abbrev-ref HEAD', returnStdout: true).trim()
+                    
+                    if (env.GIT_BRANCH == 'main') {
+                        env.DEPLOY_ENV = 'PROD'
+                        env.NODE_ENV = 'production'
+                        env.EC2_USER = 'ubuntu'
+                        env.EC2_IP = '34.197.126.56'
+                        env.REMOTE_PATH = '/home/ubuntu/Jenkins-practice'
+                        env.APP_NAME = 'health-api'
+                    } else if (env.GIT_BRANCH == 'dev') {
+                        env.DEPLOY_ENV = 'DEV'
+                        env.NODE_ENV = 'development'
+                        env.EC2_USER = 'ubuntu'
+                        env.EC2_IP = '192.168.1.10'
+                        env.REMOTE_PATH = '/home/ubuntu/Jenkins-practice-dev'
+                        env.APP_NAME = 'health-api'
+                    } else if (env.GIT_BRANCH == 'QA') {
+                        env.DEPLOY_ENV = 'QA'
+                        env.NODE_ENV = 'testing'
+                        env.EC2_USER = 'ubuntu'
+                        env.EC2_IP = '192.168.1.20'
+                        env.REMOTE_PATH = '/home/ubuntu/Jenkins-practice-qa'
+                        env.APP_NAME = 'health-api'
+                    } else {
+                        error "No se desplegará desde la rama ${env.GIT_BRANCH}. Solo se permiten las ramas main, dev y QA."
+                    }
+                    
+                    echo "Desplegando en entorno ${env.DEPLOY_ENV} desde la rama ${env.GIT_BRANCH}"
+                }
             }
         }
-
+        
+        stage('Checkout') {
+            steps {
+           
+                git branch: env.GIT_BRANCH, url: 'https://github.com/moraema/Jenkins-practice.git'
+            }
+        }
+        
         stage('Build') {
             steps {
-                sh 'rm -rf node_modules'    
+                sh 'rm -rf node_modules'
                 sh 'npm ci'
             }
         }
-
+        
         stage('Deploy') {
             steps {
                 sh """
                 ssh -i $SSH_KEY -o StrictHostKeyChecking=no $EC2_USER@$EC2_IP '
+                    mkdir -p $REMOTE_PATH &&
                     cd $REMOTE_PATH &&
-                    git pull origin main &&
+                    git fetch --all &&
+                    git checkout ${env.GIT_BRANCH} &&
+                    git pull origin ${env.GIT_BRANCH} &&
+                    export NODE_ENV=${env.NODE_ENV} &&
                     npm ci &&
-                    pm2 restart health-api || pm2 start server.js --name health-api
+                    pm2 restart ${env.APP_NAME} || pm2 start server.js --name ${env.APP_NAME}
                 '
                 """
             }
+        }
+    }
+    
+    post {
+        success {
+            echo "Despliegue exitoso en entorno ${env.DEPLOY_ENV}"
+        }
+        failure {
+            echo "Fallo en el despliegue para entorno ${env.DEPLOY_ENV}"
         }
     }
 }
