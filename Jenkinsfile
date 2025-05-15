@@ -8,7 +8,7 @@ pipeline {
     environment {
         EC2_USER = 'ubuntu'
         SSH_KEY = credentials('ssh-key-ec2')
-        DEV_IP = '34.197.126.56'
+        DEV_IP = '3.92.207.25'
         PROD_IP = '34.197.126.56'
         REMOTE_PATH = '/home/ubuntu/Jenkins-practice'
     }
@@ -18,7 +18,7 @@ pipeline {
             steps {
                 script {
                     env.ACTUAL_BRANCH = env.BRANCH_NAME ?: 'main'
-                    echo " Rama activa: ${env.ACTUAL_BRANCH}"
+                    echo "🔍 Rama activa: ${env.ACTUAL_BRANCH}"
                 }
             }
         }
@@ -37,27 +37,27 @@ pipeline {
 
                     sh """
                     ssh -i $SSH_KEY -o StrictHostKeyChecking=no $EC2_USER@$ip '
-                        echo "Actualizando sistema..."
+                        echo "📦 Actualizando sistema..."
                         sudo apt-get update -y &&
                         sudo apt-get upgrade -y
 
-                        echo "Verificando Node.js..."
+                        echo "📥 Verificando Node.js..."
                         if ! command -v node > /dev/null; then
                             curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
                             sudo apt-get install -y nodejs
                         fi
 
-                        echo "Verificando PM2..."
+                        echo "📥 Verificando PM2..."
                         if ! command -v pm2 > /dev/null; then
                             sudo npm install -g pm2
                         fi
 
-                        echo "Verificando carpeta de app..."
+                        echo "📁 Verificando carpeta de app..."
                         if [ ! -d "$REMOTE_PATH/.git" ]; then
-                            git clone https://github.com/roberto14118927/node-healthcheck.git $REMOTE_PATH
+                            git clone https://github.com/moraema/Jenkins-practice.git $REMOTE_PATH
                         fi
 
-                        echo "Pull y deploy..."
+                        echo "🔁 Pull y deploy..."
                         cd $REMOTE_PATH &&
                         git pull origin ${env.ACTUAL_BRANCH} &&
                         npm ci &&
