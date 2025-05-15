@@ -1,97 +1,71 @@
 pipeline {
     agent any
-    
-    environment {
-       
-        SSH_KEY = credentials('ssh-key-ec2')
+
+    tools {
+        nodejs 'NodeJS'
     }
-    
+
+    environment {
+        EC2_USER = 'ubuntu'
+        SSH_KEY = credentials('ssh-key-ec2')
+        DEV_IP = '34.197.126.56'
+        PROD_IP = '34.197.126.56'
+        REMOTE_PATH = '/home/ubuntu/Jenkins-practice'
+    }
+
     stages {
-        stage('Determine Environment') {
+        stage('Detect Branch') {
             steps {
                 script {
-                   
-                    def branchName = env.GIT_BRANCH
-                    
-                    echo "Rama detectada desde Jenkins: ${branchName}"
-                    
-                
-                    if (branchName.startsWith('origin/')) {
-                        branchName = branchName.substring('origin/'.length())
-                    }
-                    
-                    env.GIT_BRANCH_CLEAN = branchName
-                    echo "Rama normalizada: ${env.GIT_BRANCH_CLEAN}"
-                    
-                    
-                    if (env.GIT_BRANCH_CLEAN == 'main') {
-                        env.DEPLOY_ENV = 'PROD'
-                        env.NODE_ENV = 'production'
-                        env.EC2_USER = 'ubuntu'
-                        env.EC2_IP = '34.197.126.56'
-                        env.REMOTE_PATH = '/home/ubuntu/Jenkins-practice'
-                        env.APP_NAME = 'health-api'
-                    } else if (env.GIT_BRANCH_CLEAN == 'dev') {
-                        env.DEPLOY_ENV = 'DEV'
-                        env.NODE_ENV = 'development'
-                        env.EC2_USER = 'ubuntu'
-                        env.EC2_IP = '54.157.194.224'
-                        env.REMOTE_PATH = '/home/ubuntu/Jenkins-practice'
-                        env.APP_NAME = 'health-api'
-                    } else if (env.GIT_BRANCH_CLEAN == 'QA') {
-                        env.DEPLOY_ENV = 'QA'
-                        env.NODE_ENV = 'testing'
-                        env.EC2_USER = 'ubuntu'
-                        env.EC2_IP = '54.85.152.233'
-                        env.REMOTE_PATH = '/home/ubuntu/Jenkins-practice'
-                        env.APP_NAME = 'health-api'
-                    } else {
-                        error "No se desplegará desde la rama ${env.GIT_BRANCH_CLEAN}. Solo se permiten las ramas main, dev y QA."
-                    }
-                    
-                    echo "Desplegando en entorno ${env.DEPLOY_ENV} desde la rama ${env.GIT_BRANCH_CLEAN}"
+                    env.ACTUAL_BRANCH = env.BRANCH_NAME ?: 'main'
+                    echo " Rama activa: ${env.ACTUAL_BRANCH}"
                 }
             }
         }
-        
-        stage('Checkout') {
-            steps {
 
-                git branch: env.GIT_BRANCH_CLEAN, url: 'https://github.com/moraema/Jenkins-practice.git'
-            }
-        }
-        
-        stage('Build') {
-            steps {
-                sh 'rm -rf node_modules'
-                sh 'npm ci'
-            }
-        }
-        
         stage('Deploy') {
             steps {
-                sh """
-                ssh -i $SSH_KEY -o StrictHostKeyChecking=no $EC2_USER@$EC2_IP '
-                    mkdir -p $REMOTE_PATH &&
-                    cd $REMOTE_PATH &&
-                    git fetch --all &&
-                    git checkout ${env.GIT_BRANCH_CLEAN} &&
-                    git pull origin ${env.GIT_BRANCH_CLEAN} &&
-                    export NODE_ENV=${env.NODE_ENV} &&
-                    npm ci &&
-                    pm2 restart ${env.APP_NAME} || pm2 start server.js --name ${env.APP_NAME}
-                '
-                """
+                script {
+                    def ip = env.ACTUAL_BRANCH == 'develop' ? DEV_IP :
+                             env.ACTUAL_BRANCH == 'main'    ? PROD_IP : null
+
+                    def pm2_name = "${env.ACTUAL_BRANCH}-health"
+
+                    if (ip == null) {
+                        error "Branch ${env.ACTUAL_BRANCH} no está configurada para despliegue."
+                    }
+
+                    sh """
+                    ssh -i $SSH_KEY -o StrictHostKeyChecking=no $EC2_USER@$ip '
+                        echo "Actualizando sistema..."
+                        sudo apt-get update -y &&
+                        sudo apt-get upgrade -y
+
+                        echo "Verificando Node.js..."
+                        if ! command -v node > /dev/null; then
+                            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+                            sudo apt-get install -y nodejs
+                        fi
+
+                        echo "Verificando PM2..."
+                        if ! command -v pm2 > /dev/null; then
+                            sudo npm install -g pm2
+                        fi
+
+                        echo "Verificando carpeta de app..."
+                        if [ ! -d "$REMOTE_PATH/.git" ]; then
+                            git clone https://github.com/roberto14118927/node-healthcheck.git $REMOTE_PATH
+                        fi
+
+                        echo "Pull y deploy..."
+                        cd $REMOTE_PATH &&
+                        git pull origin ${env.ACTUAL_BRANCH} &&
+                        npm ci &&
+                        pm2 restart ${pm2_name} || pm2 start server.js --name ${pm2_name}
+                    '
+                    """
+                }
             }
-        }
-    }
-    
-    post {
-        success {
-            echo "Despliegue exitoso en entorno ${env.DEPLOY_ENV}"
-        }
-        failure {
-            echo "Fallo en el despliegue para entorno ${env.DEPLOY_ENV}"
         }
     }
 }
