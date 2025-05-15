@@ -9,6 +9,7 @@ pipeline {
         EC2_USER = 'ubuntu'
         SSH_KEY = credentials('ssh-key-ec2')
         PROD_IP = '34.197.126.56'
+        DEV_IP ='54.157.194.224'
         REMOTE_PATH = '/home/ubuntu/Jenkins-practice'
     }
 
@@ -25,7 +26,8 @@ pipeline {
         stage('Deploy') {
             steps {
                 script {
-                    def ip = env.ACTUAL_BRANCH == 'main'    ? PROD_IP : null
+                    def ip = env.ACTUAL_BRANCH == 'develop'    ? DEV_IP :
+                             env.ACTUAL_BRANCH == 'main'    ? PROD_IP : null
 
                     def pm2_name = "${env.ACTUAL_BRANCH}-health"
 
